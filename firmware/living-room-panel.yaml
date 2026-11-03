@@ -1,0 +1,460 @@
+# =====================================================================
+#  Universal Room Board – room-panel role (living room)
+#  XIAO ESP32-C6 · C4002 radar · SHT40 · BH1750 · SCD40 · PCA9554
+#  2.9" Waveshare e-paper (V2) · rotary encoder + 4 buttons
+#
+#  Copy secrets.example.yaml to secrets.yaml and fill it in.
+#  In Home Assistant: Settings > Devices > ESPHome > this device >
+#  Configure > tick "Allow the device to perform Home Assistant actions",
+#  otherwise the buttons and knob cannot control lights and blinds.
+#
+#  Lines marked CHECK depend on your exact schematic / Home Assistant
+#  entity names. Change the substitutions below to match your setup.
+# =====================================================================
+
+substitutions:
+  name: living-room-panel
+  friendly_name: Living Room Panel
+
+  # Home Assistant entities the panel controls / shows
+  light_entity: light.living_room            # CHECK
+  blind_entity: cover.living_room_blinds     # CHECK
+  scene_script: script.living_room_scene_next   # short press, scene button
+  auto_script: script.living_room_auto          # long press, scene button
+  away_script: script.living_room_all_off       # short press, all-off button
+  night_script: script.living_room_night        # long press, all-off button
+  price_entity: sensor.energi_data_service      # CHECK (Energi Data Service)
+
+  near_distance_m: "1.0"      # wake the control page when someone is closer than this
+  control_timeout_s: "30"     # back to the status page after this long
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+  on_boot:
+    priority: 800
+    then:
+      # XIAO ESP32-C6 RF switch: GPIO3 low enables it, GPIO14 low = built-in antenna
+      - switch.turn_off: rf_switch_enable
+      - switch.turn_off: rf_antenna_external
+
+esp32:
+  board: esp32-c6-devkitc-1
+  variant: esp32c6
+  framework:
+    type: esp-idf
+
+logger:
+  hardware_uart: USB_SERIAL_JTAG
+
+api:
+  encryption:
+    key: !secret api_key
+
+ota:
+  - platform: esphome      # uses the api encryption key
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: ${friendly_name} Fallback
+    password: !secret fallback_password
+
+captive_portal:
+
+time:
+  - platform: homeassistant
+    id: ha_time
+
+external_components:
+  - source:
+      type: git
+      url: https://github.com/cdjq/esphome.git
+      ref: dev
+    components: [dfrobot_c4002]
+
+# ---------------------------------------------------------------- buses
+#  XIAO pin map:  D0 GPIO0  EPD_BUSY      D6 GPIO16 RADAR_RX (ESP TX)
+#                 D1 GPIO1  EPD_DC        D7 GPIO17 RADAR_TX (ESP RX)
+#                 D2 GPIO2  KNOB_A        D8 GPIO19 EPD_SCK
+#                 D3 GPIO21 KNOB_B        D9 GPIO20 EPD_CS
+#                 D4 GPIO22 SDA           D10 GPIO18 EPD_MOSI
+#                 D5 GPIO23 SCL
+i2c:
+  sda: GPIO22
+  scl: GPIO23
+  frequency: 100kHz
+
+spi:
+  clk_pin: GPIO19
+  mosi_pin: GPIO18
+
+uart:
+  id: radar_uart
+  tx_pin: GPIO16
+  rx_pin: GPIO17
+  baud_rate: 115200
+
+pca9554:
+  - id: expander
+    address: 0x20
+
+dfrobot_c4002:
+  id: radar
+  uart_id: radar_uart
+
+# ---------------------------------------------------------------- globals
+globals:
+  - id: knob_mode            # 0 = lights, 1 = blinds
+    type: int
+    initial_value: "0"
+  - id: control_until_ms     # show the control page until this millis()
+    type: uint32_t
+    initial_value: "0"
+
+script:
+  - id: show_controls
+    mode: restart
+    then:
+      - lambda: id(control_until_ms) = millis() + ${control_timeout_s} * 1000;
+      - component.update: epaper
+
+# ---------------------------------------------------------------- switches
+switch:
+  - platform: gpio
+    id: rf_switch_enable
+    pin: GPIO3
+    restore_mode: ALWAYS_OFF
+    internal: true
+  - platform: gpio
+    id: rf_antenna_external
+    pin: GPIO14
+    restore_mode: ALWAYS_OFF
+    internal: true
+  - platform: dfrobot_c4002
+    c4002_id: radar
+    switch_environmental_calibration:
+      name: Radar calibrate room
+      entity_category: config
+
+# ---------------------------------------------------------------- sensors
+sensor:
+  - platform: sht4x
+    temperature:
+      id: room_temp
+      name: Temperature
+    humidity:
+      id: room_humidity
+      name: Humidity
+    update_interval: 10s        # fast enough for open-window detection
+
+  - platform: bh1750
+    id: room_lux
+    name: Illuminance
+    address: 0x23
+    update_interval: 30s
+
+  - platform: scd4x
+    co2:
+      id: room_co2
+      name: CO2
+    update_interval: 30s
+
+  - platform: dfrobot_c4002
+    c4002_id: radar
+    movement_distance:
+      id: radar_move_dist
+      name: Radar movement distance
+    existing_distance:
+      id: radar_still_dist
+      name: Radar presence distance
+
+  - platform: rotary_encoder
+    id: knob
+    name: Knob
+    internal: true
+    pin_a:
+      number: GPIO2       # D2 = KNOB_A (10k pull-up on board)
+    pin_b:
+      number: GPIO21      # D3 = KNOB_B
+    resolution: 1
+    on_clockwise:
+      - script.execute: show_controls
+      - if:
+          condition:
+            lambda: return id(knob_mode) == 0;
+          then:
+            - homeassistant.action:
+                action: light.turn_on
+                data:
+                  entity_id: ${light_entity}
+                  brightness_step_pct: "5"
+          else:
+            - homeassistant.action:
+                action: cover.set_cover_position
+                data:
+                  entity_id: ${blind_entity}
+                  position: !lambda |-
+                    float p = isnan(id(ha_blind_pos).state) ? 0 : id(ha_blind_pos).state;
+                    return to_string((int) std::min(100.0f, p + 10.0f));
+    on_anticlockwise:
+      - script.execute: show_controls
+      - if:
+          condition:
+            lambda: return id(knob_mode) == 0;
+          then:
+            - homeassistant.action:
+                action: light.turn_on
+                data:
+                  entity_id: ${light_entity}
+                  brightness_step_pct: "-5"
+          else:
+            - homeassistant.action:
+                action: cover.set_cover_position
+                data:
+                  entity_id: ${blind_entity}
+                  position: !lambda |-
+                    float p = isnan(id(ha_blind_pos).state) ? 0 : id(ha_blind_pos).state;
+                    return to_string((int) std::max(0.0f, p - 10.0f));
+
+  # states imported from Home Assistant for the display
+  - platform: homeassistant
+    id: ha_light_brightness
+    entity_id: ${light_entity}
+    attribute: brightness
+    internal: true
+  - platform: homeassistant
+    id: ha_blind_pos
+    entity_id: ${blind_entity}
+    attribute: current_position
+    internal: true
+  - platform: homeassistant
+    id: ha_price
+    entity_id: ${price_entity}
+    internal: true
+
+text_sensor:
+  - platform: homeassistant
+    id: ha_light_state
+    entity_id: ${light_entity}
+    internal: true
+
+# ---------------------------------------------------------------- inputs
+binary_sensor:
+  # C4002 OUT pin via the expander – fast presence for lighting / heating
+  - platform: gpio
+    id: presence
+    name: Presence
+    device_class: occupancy
+    pin:
+      pca9554: expander
+      number: 4
+    filters:
+      - delayed_off: 5s
+
+  # someone standing right in front of the panel
+  - platform: template
+    id: near_panel
+    name: Someone at panel
+    lambda: |-
+      if (!id(presence).state) return false;
+      float a = id(radar_move_dist).state, b = id(radar_still_dist).state;
+      float d = 99;
+      if (!isnan(a) && a > 0) d = std::min(d, a);
+      if (!isnan(b) && b > 0) d = std::min(d, b);
+      return d < ${near_distance_m};
+    on_press:
+      - script.execute: show_controls
+
+  - platform: gpio
+    id: knob_press
+    internal: true
+    pin:
+      pca9554: expander
+      number: 1
+      inverted: true
+    filters:
+      - delayed_on_off: 20ms
+    on_press:
+      - lambda: id(knob_mode) = 1 - id(knob_mode);
+      - script.execute: show_controls
+
+  - platform: gpio
+    id: btn_lights
+    name: Button lights
+    pin:
+      pca9554: expander
+      number: 2
+      inverted: true
+    filters:
+      - delayed_on_off: 20ms
+    on_multi_click:
+      - timing: [ON for at most 0.6s, OFF for at least 0.3s]
+        then:
+          - homeassistant.action:
+              action: light.toggle
+              data:
+                entity_id: ${light_entity}
+          - lambda: id(knob_mode) = 0;
+          - script.execute: show_controls
+      - timing: [ON for at least 0.8s]
+        then:
+          - homeassistant.action:
+              action: light.turn_on
+              data:
+                entity_id: ${light_entity}
+                brightness_pct: "100"
+          - script.execute: show_controls
+
+  - platform: gpio
+    id: btn_blinds
+    name: Button blinds
+    pin:
+      pca9554: expander
+      number: 5
+      inverted: true
+    filters:
+      - delayed_on_off: 20ms
+    on_multi_click:
+      - timing: [ON for at most 0.6s, OFF for at least 0.3s]
+        then:
+          - homeassistant.action:
+              action: cover.toggle
+              data:
+                entity_id: ${blind_entity}
+          - lambda: id(knob_mode) = 1;
+          - script.execute: show_controls
+      - timing: [ON for at least 0.8s]
+        then:
+          - homeassistant.action:
+              action: cover.set_cover_position
+              data:
+                entity_id: ${blind_entity}
+                position: "50"
+          - script.execute: show_controls
+
+  - platform: gpio
+    id: btn_scene
+    name: Button scene
+    pin:
+      pca9554: expander
+      number: 3            # CHECK: expander pin of BTN_SCENE in your schematic
+      inverted: true
+    filters:
+      - delayed_on_off: 20ms
+    on_multi_click:
+      - timing: [ON for at most 0.6s, OFF for at least 0.3s]
+        then:
+          - homeassistant.action:
+              action: script.turn_on
+              data:
+                entity_id: ${scene_script}
+          - script.execute: show_controls
+      - timing: [ON for at least 0.8s]
+        then:
+          - homeassistant.action:
+              action: script.turn_on
+              data:
+                entity_id: ${auto_script}
+          - script.execute: show_controls
+
+  - platform: gpio
+    id: btn_all_off
+    name: Button all off
+    pin:
+      pca9554: expander
+      number: 7            # CHECK: expander pin of BTN_ALL_OFF in your schematic
+      inverted: true
+    filters:
+      - delayed_on_off: 20ms
+    on_multi_click:
+      - timing: [ON for at most 0.6s, OFF for at least 0.3s]
+        then:
+          - homeassistant.action:
+              action: script.turn_on
+              data:
+                entity_id: ${away_script}
+          - script.execute: show_controls
+      - timing: [ON for at least 0.8s]
+        then:
+          - homeassistant.action:
+              action: script.turn_on
+              data:
+                entity_id: ${night_script}
+          - script.execute: show_controls
+
+# ---------------------------------------------------------------- display
+font:
+  - file: "gfonts://Roboto@700"
+    id: font_big
+    size: 34
+  - file: "gfonts://Roboto"
+    id: font_med
+    size: 16
+  - file: "gfonts://Roboto"
+    id: font_small
+    size: 12
+
+display:
+  - platform: waveshare_epaper
+    id: epaper
+    model: 2.90inv2          # try 2.90inv2-r2 if the image looks wrong
+    cs_pin: GPIO20
+    dc_pin: GPIO1
+    busy_pin: GPIO0
+    reset_pin:
+      pca9554: expander
+      number: 0
+    rotation: 90°            # landscape; use 270° if upside down
+    full_update_every: 30
+    update_interval: never   # refreshed by the interval below and on interaction
+    lambda: |-
+      const bool controls = millis() < id(control_until_ms);
+      const int W = it.get_width();
+      if (!controls) {
+        // ---------------- status page ----------------
+        if (!isnan(id(room_temp).state))
+          it.printf(4, 0, id(font_big), "%.1f°", id(room_temp).state);
+        if (!isnan(id(room_humidity).state))
+          it.printf(4, 44, id(font_med), "%.0f %% RH", id(room_humidity).state);
+        if (!isnan(id(room_co2).state)) {
+          it.printf(W - 4, 4, id(font_big), TextAlign::TOP_RIGHT, "%.0f", id(room_co2).state);
+          it.print(W - 4, 44, id(font_med), TextAlign::TOP_RIGHT, "ppm CO2");
+          if (id(room_co2).state > 1000)
+            it.print(W - 4, 66, id(font_med), TextAlign::TOP_RIGHT, "Air out!");
+        }
+        it.line(0, 92, W, 92);
+        auto t = id(ha_time).now();
+        if (t.is_valid()) it.strftime(4, 100, id(font_med), "%H:%M", t);
+        if (!isnan(id(ha_price).state))
+          it.printf(W - 4, 100, id(font_med), TextAlign::TOP_RIGHT, "%.2f kr/kWh", id(ha_price).state);
+      } else {
+        // ---------------- control page ----------------
+        const bool lights = id(knob_mode) == 0;
+        it.print(4, 0, id(font_small), "KNOB:");
+        it.print(48, 0, id(font_small), lights ? "LIGHTS" : "BLINDS");
+        // lights box
+        int y = 22;
+        if (lights) it.filled_rectangle(0, y, W / 2 - 2, 66); else it.rectangle(0, y, W / 2 - 2, 66);
+        Color fg = lights ? COLOR_OFF : COLOR_ON;
+        it.print(8, y + 4, id(font_med), fg, "Lights");
+        float b = id(ha_light_brightness).state;
+        bool on = id(ha_light_state).state == "on";
+        if (on && !isnan(b)) it.printf(8, y + 26, id(font_big), fg, "%.0f%%", b / 2.55f);
+        else it.print(8, y + 26, id(font_big), fg, on ? "On" : "Off");
+        // blinds box
+        int x = W / 2 + 2;
+        if (!lights) it.filled_rectangle(x, y, W / 2 - 2, 66); else it.rectangle(x, y, W / 2 - 2, 66);
+        Color fg2 = !lights ? COLOR_OFF : COLOR_ON;
+        it.print(x + 8, y + 4, id(font_med), fg2, "Blinds");
+        float p = id(ha_blind_pos).state;
+        if (!isnan(p)) it.printf(x + 8, y + 26, id(font_big), fg2, "%.0f%%", p);
+        it.print(4, 96, id(font_small), "1 Lights  2 Blinds  3 Scene  4 All off");
+        it.print(4, 112, id(font_small), "Press knob to switch");
+      }
+
+interval:
+  - interval: 60s
+    then:
+      - component.update: epaper
