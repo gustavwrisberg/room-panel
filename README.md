@@ -32,7 +32,7 @@ expansion header (motor board, separate design).
 | NXP PCA9554 expander | U5 | I²C 0x20 – buttons, knob press, display reset, radar OUT |
 | Waveshare 2.9" e-paper V2 | J3 | SPI (D8 SCK, D10 MOSI, D9 CS, D1 DC, D0 BUSY) |
 | Rotary encoder BMQ22 | SW1 | D2 / D3, push → expander P1 |
-| 4 × tactile buttons | SW2–SW5 | expander P2, P5, P3, P7 |
+| 4 × tactile buttons | SW2–SW5 | Lights P2, Blinds P5, All off P7, Scene P3 |
 
 Board: 37 × 54 mm, 2 layers. Case: 145 × 70 × 24 mm.
 

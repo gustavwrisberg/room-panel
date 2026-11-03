@@ -339,7 +339,7 @@ binary_sensor:
     name: Button scene
     pin:
       pca9554: expander
-      number: 3            # CHECK: expander pin of BTN_SCENE in your schematic
+      number: 3            # P3 = BTN_Scene (SW5)
       inverted: true
     filters:
       - delayed_on_off: 20ms
@@ -364,7 +364,7 @@ binary_sensor:
     name: Button all off
     pin:
       pca9554: expander
-      number: 7            # CHECK: expander pin of BTN_ALL_OFF in your schematic
+      number: 7            # P7 = BTN_ALL_OFF (SW4)
       inverted: true
     filters:
       - delayed_on_off: 20ms
@@ -450,7 +450,7 @@ display:
         it.print(x + 8, y + 4, id(font_med), fg2, "Blinds");
         float p = id(ha_blind_pos).state;
         if (!isnan(p)) it.printf(x + 8, y + 26, id(font_big), fg2, "%.0f%%", p);
-        it.print(4, 96, id(font_small), "1 Lights  2 Blinds  3 Scene  4 All off");
+        it.print(4, 96, id(font_small), "1 Lights  2 Blinds  3 All off  4 Scene");
         it.print(4, 112, id(font_small), "Press knob to switch");
       }
 

@@ -27,8 +27,8 @@ Without this the buttons and knob do nothing.
 | Knob press | Switch knob between lights and blinds | – |
 | Button 1 – Lights | Toggle | 100 % |
 | Button 2 – Blinds | Open/close | 50 % |
-| Button 3 – Scene | `script.living_room_scene_next` | `script.living_room_auto` |
-| Button 4 – All off | `script.living_room_all_off` | `script.living_room_night` |
+| Button 3 – All off (SW4) | `script.living_room_all_off` | `script.living_room_night` |
+| Button 4 – Scene (SW5) | `script.living_room_scene_next` | `script.living_room_auto` |
 
 Create the four scripts in Home Assistant (or change the substitutions).
 
@@ -78,8 +78,8 @@ with the room empty).
 | P0 | EPD_RST |
 | P1 | KNOB_SW |
 | P2 | BTN_LIGHTS |
-| P3 | BTN_SCENE (CHECK) |
+| P3 | BTN_Scene (SW5) |
 | P4 | RADAR_OUT |
 | P5 | BTN_BLINDS |
 | P6 | J2 spare |
-| P7 | BTN_ALL_OFF (CHECK) |
+| P7 | BTN_ALL_OFF (SW4) |
