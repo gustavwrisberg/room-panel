@@ -8,12 +8,15 @@ a Seeed XIAO ESP32-C6, assembled by JLCPCB, running ESPHome.
 The same PCB can also drive a motorized IKEA HOPPVALS blind through the J2
 expansion header (motor board, separate design).
 
+![PCB with C4002 radar and 2.9" e-paper](docs/pcb_render.png)
+
 ## What's in this repo
 
 | Folder | Contents |
 | --- | --- |
 | `hardware/BOM.csv` | Full bill of materials for one finished panel (PCB, modules, connectors, cables, case hardware) |
 | `hardware/kicad/` | KiCad 10 project (schematic, PCB) and the JLCPCB production files |
+| `hardware/render/` | Scripts that make the 3D render from the KiCad board |
 | `hardware/case/` | Parametric case (CadQuery), printable STL and STEP files |
 | `firmware/` | ESPHome configuration for the living-room panel |
 | `docs/` | Assembly, Home Assistant setup and pin map |

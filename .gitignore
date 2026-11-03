@@ -13,3 +13,7 @@ _autosave-*
 # Python
 __pycache__/
 *.pyc
+hardware/render/node_modules/
+hardware/render/k3d/
+hardware/render/scene.*
+hardware/render/package*.json

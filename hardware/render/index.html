@@ -1,0 +1,77 @@
+<!doctype html><html><head><meta charset="utf-8">
+<style>html,body{margin:0;background:#eef0f2;overflow:hidden}canvas{display:block}</style>
+<script type="importmap">{"imports":{"three":"./node_modules/three/build/three.module.js","three/addons/":"./node_modules/three/examples/jsm/"}}</script>
+</head><body>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+const P = new URLSearchParams(location.search);
+const W = +P.get('w') || 1600, H = +P.get('h') || 900;
+const info = await (await fetch('scene.json')).json();
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(+P.get('dpr') || 1); renderer.setSize(W, H);
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.9;
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xeef0f2);
+const pm = new THREE.PMREMGenerator(renderer);
+scene.environment = pm.fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environmentIntensity = 0.55;
+
+const gltf = await new GLTFLoader().loadAsync('scene.glb');
+const root = gltf.scene;           // GLB is Y-up after export; our data is Z-up -> trimesh keeps it as-is
+root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+scene.add(root);
+
+// e-paper status page
+const cv = document.createElement('canvas'); cv.width = 296 * 4; cv.height = 128 * 4;
+const g = cv.getContext('2d'); g.scale(4, 4);
+g.fillStyle = '#e9e8e1'; g.fillRect(0, 0, 296, 128); g.fillStyle = '#1d1d1f'; g.strokeStyle = '#1d1d1f';
+const F = s => `${s}px "DejaVu Sans", sans-serif`;
+g.textBaseline = 'top';
+g.font = F(34); g.fillText('21.6°', 4, 0);
+g.font = F(16); g.fillText('48 % RH', 4, 46);
+g.textAlign = 'right'; g.font = F(34); g.fillText('612', 292, 2);
+g.font = F(16); g.fillText('ppm CO2', 292, 46);
+g.lineWidth = 1; g.beginPath(); g.moveTo(0, 92.5); g.lineTo(296, 92.5); g.stroke();
+g.textAlign = 'left'; g.fillText('12:30', 4, 101);
+g.textAlign = 'right'; g.fillText('1.84 kr/kWh', 292, 101);
+const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
+const [ax0, ay0, ax1, ay1, az] = info.active;
+const scr = new THREE.Mesh(new THREE.PlaneGeometry(ax1 - ax0, ay1 - ay0),
+  new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9, metalness: 0 }));
+scr.position.set((ax0 + ax1) / 2, (ay0 + ay1) / 2, az); scr.receiveShadow = true; scene.add(scr);
+
+// display cable
+const cols = [0x8a8a8a, 0x5b3a1e, 0x2457c5, 0xe2c02a, 0xe57a1e, 0x2f9a45, 0xf2f2f2, 0x7a3fb0];
+info.wires_from.forEach((a, i) => {
+  const b = info.wires_to[7 - i];
+  const pts = [new THREE.Vector3(...a), new THREE.Vector3(a[0], a[1], a[2] + 2.2),
+    new THREE.Vector3(a[0] + 4.5, (a[1] * 0.6 + b[1] * 0.4), a[2] + 3.0),
+    new THREE.Vector3(b[0] - 3.5, b[1], b[2] + 1.0), new THREE.Vector3(...b)];
+  const curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal');
+  const m = new THREE.Mesh(new THREE.TubeGeometry(curve, 64, 0.42, 10),
+    new THREE.MeshStandardMaterial({ color: cols[i], roughness: 0.45 }));
+  m.castShadow = true; scene.add(m);
+});
+
+// lights + shadow catcher
+const key = new THREE.DirectionalLight(0xffffff, 1.6);
+key.position.set(20, -60, 220); key.target.position.set(93, -147, 0);
+key.castShadow = true; key.shadow.mapSize.set(4096, 4096);
+Object.assign(key.shadow.camera, { left: -120, right: 120, top: 120, bottom: -120, near: 50, far: 400 });
+key.shadow.bias = -0.0004; key.shadow.radius = 4;
+scene.add(key, key.target);
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000), new THREE.ShadowMaterial({ opacity: 0.16 }));
+ground.position.set(93, -147, -3.5); ground.receiveShadow = true; scene.add(ground);
+
+const cam = new THREE.PerspectiveCamera(+P.get('fov') || 24, W / H, 1, 2000);
+cam.up.set(0, 0, 1);
+const t = (P.get('t') || '93,-147,3').split(',').map(Number);
+const c = (P.get('c') || '55,-290,215').split(',').map(Number);
+cam.position.set(...c); cam.lookAt(...t);
+renderer.render(scene, cam);
+window.DONE = true;
+</script></body></html>
