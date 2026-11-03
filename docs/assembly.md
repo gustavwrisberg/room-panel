@@ -5,9 +5,15 @@
 | Ref | Part | Note |
 | --- | --- | --- |
 | J1 | 1×5 female socket, horizontal | C4002 lies flat with its antenna side facing the front |
-| J3 | JST PH 8-pin (or 1×8 pin header) | Display cable |
-| J4 | 1×4 female socket | SCD40 breakout cable |
+| J3 | JST PH 8-pin (or 1×8 pin header) | **Fit on the back of the PCB.** Display cable |
+| J4 | – (no socket) | **Solder 4 wires straight in from the back** to the SCD40/SCD41 breakout |
 | J2 | – | Leave empty on panels (motor board only) |
+
+There is only 8 mm between the PCB and the front panel. A connector, its plug
+and the cable bend need more than that, so both cables run on the back of the
+board, behind the display, next to the CO₂ cradle. The display's own connector is
+on its back, so the cable goes straight across. J4 wires: GND black, 3V3 red,
+SCL yellow, SDA green (pin 1 = GND, square pad).
 
 Check the display's pin order on its silkscreen: VCC, GND, DIN, CLK, CS, DC, RST, BUSY
 must match J3 pins 1–8. Set the display's **BS switch to 0** (4-wire SPI).
@@ -21,7 +27,7 @@ Files: `hardware/case/out/`
 | `front_shell.stl` | 1 | Front face down | No supports needed except optionally for the USB slot |
 | `back_plate.stl` | 1 | Flat side down | |
 | `button_cap.stl` | 4 | Flange down | |
-| `knob.stl` | 1 | Top down | Print a test first: shaft hole fit is printer-dependent |
+| `knob.stl` | 1 | Top down | Ø13 mm (an Ø18 knob would cover button 1). Print a test first: shaft hole fit is printer-dependent |
 
 PLA or PETG, 0.2 mm layers, 3 walls, 20 % infill. Avoid black filament in front
 of the radar window (some black pigments contain carbon and weaken 24 GHz).
@@ -46,8 +52,8 @@ Re-run `python3 room_panel_case.py` after changes (`pip install cadquery`).
 2. Lay the display module face-down between the four corner locators.
 3. Place the PCB on its four corner shelves (components facing the front panel);
    the knob shaft goes through its hole.
-4. Plug in the display cable (J3) and the CO₂ cable (J4); lay the CO₂ breakout in
-   the cradle on the back plate, sensor opening facing the display.
+4. Plug in the display cable (J3, back of the PCB); lay the CO₂ breakout (wired
+   to J4) in the cradle on the back plate, sensor facing the display.
 5. Screw the back plate on with 4 × M2.5 × 8 self-tapping screws.
 6. Press the knob onto the shaft.
 7. Hang on two wall screws through the keyhole slots; USB-C exits at the bottom.

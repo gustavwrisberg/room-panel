@@ -214,18 +214,19 @@ def button_cap():
 
 
 def knob():
-    """Ø18 knurled knob for a 6 mm D-shaft. CHECK shaft type/length in the BMQ22 datasheet."""
-    d, h = 18.0, 12.0
+    """Ø13 knurled knob for a 6 mm D-shaft. CHECK shaft type/length in the BMQ22 datasheet.
+    Max Ø ~13.5: the knob centre is 11.7 mm from button 1 (cap Ø7.8)."""
+    d, h = 13.0, 11.0
     shaft_d, flat = 5.95, 4.5          # press fit; tune with a test print
     k = cyl(d, h).edges(">Z").fillet(1.5)
-    n = 24
+    n = 18
     for i in range(n):
         g = cq.Workplane("XY").box(1.2, 1.2, h - 2).translate((d / 2, 0, (h - 2) / 2)).rotate((0, 0, 0), (0, 0, 1), 360 / n * i)
         k = k.cut(g)
     hole = cyl(shaft_d, h - 2.0)
     hole = hole.cut(cq.Workplane("XY").box(shaft_d, shaft_d, h).translate((flat - shaft_d / 2 + shaft_d / 2, 0, h / 2)))
     k = k.cut(hole)
-    k = k.cut(cyl(3.0, 1.0).translate((0, d / 2 - 3.0, h - 1.0)))      # indicator dot
+    k = k.cut(cyl(3.0, 1.0).translate((0, d / 2 - 3.5, h - 1.0)))      # indicator dot (keep clear of the fillet)
     return k
 
 

@@ -8,6 +8,8 @@ a Seeed XIAO ESP32-C6, assembled by JLCPCB, running ESPHome.
 The same PCB can also drive a motorized IKEA HOPPVALS blind through the J2
 expansion header (motor board, separate design).
 
+![Finished panel](docs/case_closed.png)
+
 ![PCB with C4002 radar and 2.9" e-paper](docs/pcb_render.png)
 
 ## What's in this repo
@@ -21,7 +23,7 @@ expansion header (motor board, separate design).
 | `firmware/` | ESPHome configuration for the living-room panel |
 | `docs/` | Assembly, Home Assistant setup and pin map |
 
-![Case preview](docs/case_preview.png)
+![Exploded view: back plate with SCD41, PCB and display, front shell](docs/case_exploded.png)
 
 ## Hardware at a glance
 
@@ -31,7 +33,7 @@ expansion header (motor board, separate design).
 | DFRobot C4002 mmWave radar | J1 | UART 115200 (D6/D7), OUT → expander P4 |
 | Sensirion SHT40 | U1 | I²C 0x44 |
 | ROHM BH1750 | U4 | I²C 0x23 |
-| SCD40 breakout | J4 | I²C 0x62, cable, sits behind the display |
+| SCD40/SCD41 breakout | J4 | I²C 0x62, wires soldered into J4, sits behind the display |
 | NXP PCA9554 expander | U5 | I²C 0x20 – buttons, knob press, display reset, radar OUT |
 | Waveshare 2.9" e-paper V2 | J3 | SPI (D8 SCK, D10 MOSI, D9 CS, D1 DC, D0 BUSY) |
 | Rotary encoder BMQ22 | SW1 | D2 / D3, push → expander P1 |

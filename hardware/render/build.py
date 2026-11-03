@@ -142,7 +142,8 @@ def Rxyz(rx, ry, rz):
     Z = np.array([[math.cos(rz), -math.sin(rz), 0], [math.sin(rz), math.cos(rz), 0], [0, 0, 1]])
     return Z @ Y @ X
 
-SKIP = {"J2"}                # not populated on the panel
+SKIP = {"J2", "J4"}          # J2 not populated; SCD41 wires are soldered straight into J4
+BOTTOM = {"J3"}              # fitted on the back of the board (no room under the front panel)
 by_col = {}
 for ref, fid, f, rot, pos, fp in footprints:
     if ref in SKIP: continue
@@ -158,7 +159,10 @@ for ref, fid, f, rot, pos, fp in footprints:
         rc = np.array(RECENTER.get(name, (0, 0, 0)))
         for v, idx, col in model_chunks(path):
             p = (v - rc) @ R_m.T + np.array(off)
-            p = p @ R_f.T + np.array([pos[0], -pos[1], T])
+            zb = T
+            if ref in BOTTOM:          # flip about the pin row (local x axis) onto the back side
+                p = p * np.array([1, -1, -1]); zb = 0.0
+            p = p @ R_f.T + np.array([pos[0], -pos[1], zb])
             by_col.setdefault(tuple(round(c, 3) for c in col), []).append(trimesh.Trimesh(p, idx, process=False))
 for col, ms in by_col.items():
     m = trimesh.util.concatenate(ms)
@@ -220,7 +224,7 @@ gz = dz0 + 1.6
 add(bx(GX0, GY0, gz, GX0 + GW, GY0 + GH, gz + 1.15), (0.80, 0.80, 0.78), 0.0, 0.35, "glass")
 # FPC fold at the left end
 add(bx(GX0 - 1.2, cy - 7, gz - 0.3, GX0 + 0.2, cy + 7, gz + 0.9), (0.80, 0.50, 0.15), 0.2, 0.5, "fpc")
-AX0 = GX0 + 8.6; AW, AH = 66.9, 29.1; AY0 = cy - AH / 2
+AW, AH = 66.9, 29.1; AX0 = DX0 + DW / 2 - AW / 2; AY0 = cy - AH / 2   # centred, as VIEW_OFFSET_X = 0 in the case. CHECK
 # connector on the back of the display
 add(bx(DX0 + 3.0, cy - 8.5, dz0 - 4.5, DX0 + 7.5, cy + 8.5, dz0), (0.93, 0.90, 0.82), 0, 0.6, "disp_conn")
 
@@ -228,7 +232,9 @@ add(bx(DX0 + 3.0, cy - 8.5, dz0 - 4.5, DX0 + 7.5, cy + 8.5, dz0), (0.93, 0.90, 0
 ref, fid, f, rot, pos, fp = next(x for x in footprints if x[0] == "J3")
 pins = [f(i * 2.0, 0) for i in range(8)]
 xs, ys = [p[0] for p in pins], [p[1] for p in pins]
-add(bx(min(xs) - 1.4, min(ys) - 1.95, T + 2.0, max(xs) + 1.4, max(ys) + 1.95, T + 8.4), (0.94, 0.92, 0.85), 0, 0.6, "ph_plug")
+add(bx(min(xs) - 1.4, min(ys) - 1.95, -7.0, max(xs) + 1.4, max(ys) + 1.95, -1.6), (0.94, 0.92, 0.85), 0, 0.6, "ph_plug")
+ref, fid, f, rot, pos, fp = next(x for x in footprints if x[0] == "J4")
+j4 = [f(0, k * 2.54) for k in range(4)]
 
 scene = trimesh.Scene()
 for i, (m, rgb, metal, rough, name) in enumerate(meshes):
@@ -240,7 +246,9 @@ scene.export(OUT + "/scene.glb")
 json.dump({
     "board": [BX0, -BY1, BX1, -BY0, T],
     "active": [AX0, AY0, AX0 + AW, AY0 + AH, gz + 1.16],
-    "wires_from": [[p[0], p[1], T + 8.4] for p in pins],
+    "wires_from": [[p[0], p[1], -7.0] for p in pins],
+    "j4": [[p[0], p[1], 0.0] for p in j4],
+    "scd": [(DX0 - 69.2) + 103.75, cy + 0.2, -9.4],
     "wires_to": [[DX0 + 3.0, cy - 7.0 + 2.0 * i, dz0 - 2.2] for i in range(8)],
     "radar": [rx0, ry0, rx1, ry1, rz + 1.0],
 }, open(OUT + "/scene.json", "w"))

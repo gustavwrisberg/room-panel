@@ -3,15 +3,20 @@
 <script type="importmap">{"imports":{"three":"./node_modules/three/build/three.module.js","three/addons/":"./node_modules/three/examples/jsm/"}}</script>
 </head><body>
 <script type="module">
+// Modes: ?mode=pcb (board, radar and display on a table)
+//        ?mode=case (finished panel on the wall)
+//        ?mode=exploded (front shell / board / back plate pulled apart)
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 const P = new URLSearchParams(location.search);
-const W = +P.get('w') || 1600, H = +P.get('h') || 900;
+const W = +P.get('w') || 1600, H = +P.get('h') || 900, MODE = P.get('mode') || 'pcb';
+const EXP = MODE === 'exploded' ? [+P.get('ef') || 42, -(+P.get('eb') || 34)] : [0, 0];
 const info = await (await fetch('scene.json')).json();
 const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
 renderer.setPixelRatio(+P.get('dpr') || 1); renderer.setSize(W, H);
-renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.9;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = +P.get('exp') || 0.9;
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.body.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
@@ -19,11 +24,12 @@ scene.background = new THREE.Color(0xeef0f2);
 const pm = new THREE.PMREMGenerator(renderer);
 scene.environment = pm.fromScene(new RoomEnvironment(), 0.04).texture;
 scene.environmentIntensity = 0.55;
+const shadows = o => o.traverse(m => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
+const std = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.6, metalness: 0, ...o });
 
-const gltf = await new GLTFLoader().loadAsync('scene.glb');
-const root = gltf.scene;           // GLB is Y-up after export; our data is Z-up -> trimesh keeps it as-is
-root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
-scene.add(root);
+// ---------------------------------------------------------------- board, radar, display (from build.py)
+const pcb = (await new GLTFLoader().loadAsync('scene.glb')).scene;
+shadows(pcb); scene.add(pcb);
 
 // e-paper status page
 const cv = document.createElement('canvas'); cv.width = 296 * 4; cv.height = 128 * 4;
@@ -40,35 +46,125 @@ g.textAlign = 'left'; g.fillText('12:30', 4, 101);
 g.textAlign = 'right'; g.fillText('1.84 kr/kWh', 292, 101);
 const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
 const [ax0, ay0, ax1, ay1, az] = info.active;
-const scr = new THREE.Mesh(new THREE.PlaneGeometry(ax1 - ax0, ay1 - ay0),
-  new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9, metalness: 0 }));
+const scr = new THREE.Mesh(new THREE.PlaneGeometry(ax1 - ax0, ay1 - ay0), std(0xffffff, { map: tex, roughness: 0.9 }));
 scr.position.set((ax0 + ax1) / 2, (ay0 + ay1) / 2, az); scr.receiveShadow = true; scene.add(scr);
 
-// display cable
-const cols = [0x8a8a8a, 0x5b3a1e, 0x2457c5, 0xe2c02a, 0xe57a1e, 0x2f9a45, 0xf2f2f2, 0x7a3fb0];
+const tube = (pts, r, color, tension = 'centripetal') => {
+  const m = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map(p => new THREE.Vector3(...p)), false, tension), 80, r, 10), std(color, { roughness: 0.45 }));
+  m.castShadow = true; scene.add(m); return m;
+};
+// display cable: PH plug on the back of the board -> connector on the back of the display
+const dcol = [0x8a8a8a, 0x5b3a1e, 0x2457c5, 0xe2c02a, 0xe57a1e, 0x2f9a45, 0xf2f2f2, 0x7a3fb0];
 info.wires_from.forEach((a, i) => {
   const b = info.wires_to[7 - i];
-  const pts = [new THREE.Vector3(...a), new THREE.Vector3(a[0], a[1], a[2] + 2.2),
-    new THREE.Vector3(a[0] + 4.5, (a[1] * 0.6 + b[1] * 0.4), a[2] + 3.0),
-    new THREE.Vector3(b[0] - 3.5, b[1], b[2] + 1.0), new THREE.Vector3(...b)];
-  const curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal');
-  const m = new THREE.Mesh(new THREE.TubeGeometry(curve, 64, 0.42, 10),
-    new THREE.MeshStandardMaterial({ color: cols[i], roughness: 0.45 }));
-  m.castShadow = true; scene.add(m);
+  tube([a, [a[0], a[1], a[2] - 2.0], [a[0] + 5.5, a[1] * 0.6 + b[1] * 0.4, -5.5], [b[0] - 3.0, b[1], b[2] - 1.0], b], 0.42, dcol[i]);
 });
 
-// lights + shadow catcher
+// ---------------------------------------------------------------- SCD41 breakout (lies in the cradle on the back plate)
+function scd41() {
+  const grp = new THREE.Group();
+  const BW = 15.5, BH = 24, BT = 1.6;
+  const holes = [0, 1, 2, 3].map(k => [BW / 2 + (k - 1.5) * 2.54, 2.6]);
+  // silkscreen texture
+  const s = 16, c = document.createElement('canvas'); c.width = BW * s; c.height = BH * s;
+  const x = c.getContext('2d'); x.scale(s, s);
+  x.fillStyle = '#1748a8'; x.fillRect(0, 0, BW, BH);
+  x.strokeStyle = '#f4f4f4'; x.fillStyle = '#f4f4f4'; x.lineWidth = 0.15;
+  x.beginPath(); x.arc(1.3, 1.3, 0.75, 0, 7); x.fill();
+  x.strokeRect(BW / 2 - 5.9, 1.4, 11.8, 11.8);
+  x.save(); x.translate(BW - 1.0, 2.2); x.rotate(Math.PI / 2); x.font = '1.2px "DejaVu Sans"'; x.fillText('U1', 0, 0); x.restore();
+  x.font = '1.15px "DejaVu Sans"'; x.textAlign = 'center';
+  [['C1', 3.3], ['R2', BW / 2], ['R1', BW - 3.3]].forEach(([t, px]) => x.fillText(t, px, 14.7));
+  [3.3, BW / 2, BW - 3.3].forEach(px => x.strokeRect(px - 1.2, 15.2, 2.4, 1.4));
+  x.textAlign = 'left';
+  ['GND', 'VDD', 'SCL', 'SDA'].forEach((t, k) => {
+    x.save(); x.translate(holes[k][0] + 0.45, 20.6); x.rotate(-Math.PI / 2); x.font = '1.25px "DejaVu Sans"'; x.fillText(t, 0, 0); x.restore();
+  });
+  x.beginPath(); x.moveTo(0.8, 17.4); x.lineTo(BW - 0.8, 17.4); x.stroke();
+  holes.forEach(([hx]) => { x.strokeRect(hx - 1.15, BH - 2.6 - 1.15, 2.3, 2.3); });
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+  const body = new THREE.Mesh(new THREE.BoxGeometry(BW, BH, BT), [std(0x123c8c), std(0x123c8c), std(0x123c8c), std(0x123c8c), std(0xffffff, { map: t, roughness: 0.55 }), std(0x123c8c)]);
+  // canvas y runs down; flip so the pin row is at v = 2.6 (bottom of the photo)
+  body.position.set(BW / 2, BH / 2, BT / 2);   // canvas top = sensor end (v = BH), pin row at v = 2.6
+  grp.add(body);
+  const gold = std(0xc99a45, { metalness: 0.85, roughness: 0.35 });
+  holes.forEach(([hx, hy]) => {
+    const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, BT + 0.08, 24), gold);
+    ring.rotation.x = Math.PI / 2; ring.position.set(hx, hy, BT / 2); grp.add(ring);
+    const solder = new THREE.Mesh(new THREE.SphereGeometry(0.75, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), std(0xcfcfcf, { metalness: 0.9, roughness: 0.25 }));
+    solder.rotation.x = Math.PI / 2; solder.scale.set(1, 0.6, 1); solder.position.set(hx, hy, BT + 0.02); grp.add(solder);
+  });
+  // passives
+  [3.3, BW / 2, BW - 3.3].forEach((px, i) => {
+    const p = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.8, 0.5), std(i ? 0x1b1b1b : 0x9a7a55));
+    p.position.set(px, BH - 15.9, BT + 0.25); grp.add(p);
+    [-0.65, 0.65].forEach(d => { const e = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.82, 0.52), std(0xcfcfcf, { metalness: 0.9, roughness: 0.3 })); e.position.set(px + d, BH - 15.9, BT + 0.26); grp.add(e); });
+  });
+  // SCD41: 10.1 x 10.1 x 6.5, PCB base, metal cap, white membrane
+  const sx = BW / 2, sy = BH - 7.3;
+  const base = new THREE.Mesh(new THREE.BoxGeometry(10.1, 10.1, 1.0), std(0x1e3a22));
+  base.position.set(sx, sy, BT + 0.5); grp.add(base);
+  const capShape = new THREE.Shape(); const r = 1.2, a = 4.6;
+  capShape.moveTo(-a + r, -a); capShape.lineTo(a - r, -a); capShape.quadraticCurveTo(a, -a, a, -a + r); capShape.lineTo(a, a - r); capShape.quadraticCurveTo(a, a, a - r, a);
+  capShape.lineTo(-a + r, a); capShape.quadraticCurveTo(-a, a, -a, a - r); capShape.lineTo(-a, -a + r); capShape.quadraticCurveTo(-a, -a, -a + r, -a);
+  const cap = new THREE.Mesh(new THREE.ExtrudeGeometry(capShape, { depth: 5.4, bevelEnabled: true, bevelThickness: 0.25, bevelSize: 0.25, bevelSegments: 3 }), std(0xd9dadc, { metalness: 0.75, roughness: 0.3 }));
+  cap.position.set(sx, sy, BT + 1.0); grp.add(cap);
+  const mem = new THREE.Mesh(new THREE.PlaneGeometry(6.6, 6.6), std(0xfafafa, { roughness: 0.95 }));
+  mem.position.set(sx, sy, BT + 1.0 + 5.4 + 0.26); grp.add(mem);
+  shadows(grp);
+  grp.userData.holes = holes.map(([hx, hy]) => [hx, hy, BT]);
+  return grp;
+}
+const scd = scd41();
+// module frame: u across (15.5), v along (24, pin row at v=0 end), w up.  Long axis along +X, pin row on the left.
+const [scx, scy, scz] = info.scd;
+const mScd = new THREE.Matrix4().set(0, 1, 0, scx - 12, -1, 0, 0, scy + 7.75, 0, 0, 1, scz + EXP[1], 0, 0, 0, 1);
+scd.applyMatrix4(mScd); scene.add(scd);
+// I2C wires: soldered into J4 from the back of the board -> soldered into the breakout
+const icol = [0x1c1c1c, 0xd23a2a, 0xe2c02a, 0x2f9a45];
+info.j4.forEach((a, k) => {
+  const h = new THREE.Vector3(...scd.userData.holes[k]).applyMatrix4(mScd).toArray();
+  const top = [h[0], h[1], h[2] + 0.4];
+  tube([a, [a[0], a[1], -3.0], [a[0] + 4, a[1], -6.0 + EXP[1] * 0.4], [h[0] - 6, h[1], top[2] + 4.0], [h[0], h[1], top[2] + 1.2], top], 0.42, icol[k]);
+  const blob = new THREE.Mesh(new THREE.SphereGeometry(0.7, 16, 8), std(0xcfcfcf, { metalness: 0.9, roughness: 0.25 }));
+  blob.position.set(a[0], a[1], -0.1); blob.scale.set(1, 1, 0.6); scene.add(blob);
+});
+
+// ---------------------------------------------------------------- case (STL from hardware/case/out)
+if (MODE !== 'pcb') {
+  const stl = new STLLoader(), base = P.get('case') || '../case/out/';
+  const load = async n => { const gm = await stl.loadAsync(base + n + '.stl'); gm.computeVertexNormals(); return gm; };
+  // case model frame -> scene: x' = 165 - x, y' = y - 181.8, z' = 11.6 - z
+  const M = new THREE.Matrix4().set(-1, 0, 0, 165, 0, 1, 0, -181.8, 0, 0, -1, 11.6, 0, 0, 0, 1);
+  const off = z => new THREE.Matrix4().makeTranslation(0, 0, z);
+  const caseCol = std(0xeceae4, { roughness: 0.75 }), dark = std(0x3b3e44, { roughness: 0.55 });
+  const add = (gm, mat, ...ms) => { const m = new THREE.Mesh(gm, mat); ms.forEach(t => m.applyMatrix4(t)); m.castShadow = m.receiveShadow = true; scene.add(m); return m; };
+  const flat = gm => { const ng = gm.toNonIndexed ? gm : gm; ng.deleteAttribute('normal'); ng.computeVertexNormals(); return ng; };
+  add(await load('front_shell'), caseCol, M, off(EXP[0]));
+  add(await load('back_plate'), caseCol, M, off(EXP[1]));
+  const W_ = 145, H_ = 70, PX = 8, PY = 8;
+  const capG = await load('button_cap');
+  for (const [bx, by] of [[26.3, 14.9], [26.3, 26.2], [26.3, 38.3], [26.3, 50.0]])
+    add(capG, dark, new THREE.Matrix4().makeTranslation(W_ - (PX + bx), H_ - (PY + by), -1.5), M, off(EXP[0]));
+  const knobG = await load('knob');
+  add(knobG, dark, new THREE.Matrix4().makeRotationX(Math.PI), new THREE.Matrix4().makeTranslation(W_ - (PX + 26.3), H_ - (PY + 3.2), -0.5), M, off(EXP[0] * (MODE === 'exploded' ? 1.3 : 1)));
+}
+
+// ---------------------------------------------------------------- lights, shadow catcher, camera
+const wall = MODE !== 'pcb';
 const key = new THREE.DirectionalLight(0xffffff, 1.6);
-key.position.set(20, -60, 220); key.target.position.set(93, -147, 0);
+key.position.set(...(wall ? [10, -40, 240] : [20, -60, 220])); key.target.position.set(93, -147, 0);
+if (wall) key.position.set(-20, -60, 230);
 key.castShadow = true; key.shadow.mapSize.set(4096, 4096);
-Object.assign(key.shadow.camera, { left: -120, right: 120, top: 120, bottom: -120, near: 50, far: 400 });
+Object.assign(key.shadow.camera, { left: -150, right: 150, top: 150, bottom: -150, near: 20, far: 600 });
 key.shadow.bias = -0.0004; key.shadow.radius = 4;
 scene.add(key, key.target);
-const ground = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000), new THREE.ShadowMaterial({ opacity: 0.16 }));
-ground.position.set(93, -147, -3.5); ground.receiveShadow = true; scene.add(ground);
+const gz = wall ? (MODE === 'exploded' ? -12.4 + EXP[1] - 0.3 : -12.7) : -3.5;
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(2000, 2000), new THREE.ShadowMaterial({ opacity: wall ? 0.13 : 0.16 }));
+ground.position.set(93, -147, gz); ground.receiveShadow = true; if (MODE !== 'exploded') scene.add(ground);
 
-const cam = new THREE.PerspectiveCamera(+P.get('fov') || 24, W / H, 1, 2000);
-cam.up.set(0, 0, 1);
+const cam = new THREE.PerspectiveCamera(+P.get('fov') || 24, W / H, 1, 3000);
+const up = (P.get('up') || (wall ? '0,1,0' : '0,0,1')).split(',').map(Number); cam.up.set(...up);
 const t = (P.get('t') || '93,-147,3').split(',').map(Number);
 const c = (P.get('c') || '55,-290,215').split(',').map(Number);
 cam.position.set(...c); cam.lookAt(...t);
