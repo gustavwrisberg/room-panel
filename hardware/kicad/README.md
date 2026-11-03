@@ -3,15 +3,19 @@
 | File | Contents |
 | --- | --- |
 | `Smart_home_universal_board.kicad_pro / .kicad_sch / .kicad_pcb` | Rev 1 board, 37 × 54 mm, 2 layers |
-| `libs/` | Project libraries: `EasyEDA` (encoder, SHT40, BH1750, PCA9554, buttons, C4002 socket footprint) and `Seeed_Studio_XIAO_Series` |
+| `libs/EasyEDA.*` | The parts this board uses from the impartGUI EasyEDA library (symbols, footprints, 3D models): encoder, SHT40, BH1750, PCA9554, buttons, C4002 socket footprint |
+| `libs/Seeed_Studio_XIAO_Series.*` | XIAO ESP32-C6 symbol and footprint |
 | `sym-lib-table`, `fp-lib-table` | Point KiCad at `libs/` via `${KIPRJMOD}`, so the project opens on any PC |
 | `production/` | Fabrication Toolkit output for JLCPCB (gerber zip, BOM, CPL, IPC netlist) |
 
-The libraries in `libs/` were extracted from the symbols and footprints embedded in
-this schematic and PCB (the original impartGUI library lived only on one PC).
-The EasyEDA **3D models** (`.wrl`) were not embedded and are not included, so those
-five parts show without a body in the 3D viewer. Re-import them with impartGUI by
-LCSC number if you need them (see `../BOM.md`).
+`libs/EasyEDA.*` is copied from the original library (`E:\KicadLibrary`), trimmed
+to the parts on this board. The XIAO library was extracted from the copy embedded
+in the schematic and PCB.
+
+The footprints load their 3D models from `${KICAD_3RD_PARTY}/EasyEDA.3dshapes/`.
+On another PC, copy `libs/EasyEDA.3dshapes` into the folder that
+`KICAD_3RD_PARTY` points to (Preferences → Configure Paths) to see them in the
+3D viewer. Fabrication is not affected.
 
 ## BOM fix (Nov 2026)
 
