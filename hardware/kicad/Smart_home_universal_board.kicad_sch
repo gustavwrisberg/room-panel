@@ -7614,7 +7614,7 @@
 				)
 			)
 		)
-		(property "LCSC Part" "C25900"
+		(property "LCSC Part" "C25744"
 			(at 210.82 31.75 0)
 			(hide yes)
 			(show_name no)
@@ -8948,7 +8948,7 @@
 				)
 			)
 		)
-		(property "LCSC Part" "C1525"
+		(property "LCSC Part" "C15195"
 			(at 210.82 43.18 0)
 			(hide yes)
 			(show_name no)
@@ -10589,7 +10589,7 @@
 				)
 			)
 		)
-		(property "LCSC Part" "C25900"
+		(property "LCSC Part" "C25744"
 			(at 198.12 41.91 0)
 			(hide yes)
 			(show_name no)
@@ -11063,7 +11063,7 @@
 				)
 			)
 		)
-		(property "LCSC Part" "C1525"
+		(property "LCSC Part" "C15195"
 			(at 210.82 50.8 0)
 			(hide yes)
 			(show_name no)

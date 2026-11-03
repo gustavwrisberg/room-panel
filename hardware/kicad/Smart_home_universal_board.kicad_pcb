@@ -189,7 +189,7 @@
 				)
 			)
 		)
-		(property "LCSC Part" "C25900"
+		(property "LCSC Part" "C25744"
 			(at 0 0 0)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -1377,7 +1377,7 @@
 				)
 			)
 		)
-		(property "LCSC Part" "C25900"
+		(property "LCSC Part" "C25744"
 			(at 0 0 180)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -3570,7 +3570,7 @@
 				)
 			)
 		)
-		(property "LCSC Part" "C1525"
+		(property "LCSC Part" "C15195"
 			(at 0 0 270)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -6353,7 +6353,7 @@
 				)
 			)
 		)
-		(property "LCSC Part" "C1525"
+		(property "LCSC Part" "C15195"
 			(at 0 0 180)
 			(unlocked yes)
 			(layer "F.Fab")

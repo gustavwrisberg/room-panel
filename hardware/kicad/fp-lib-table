@@ -1,0 +1,5 @@
+(fp_lib_table
+  (version 7)
+  (lib (name "EasyEDA")(type "KiCad")(uri "${KIPRJMOD}/libs/EasyEDA.pretty")(options "")(descr "LCSC parts imported with impartGUI (extracted from this project)"))
+  (lib (name "Seeed_Studio_XIAO_Series")(type "KiCad")(uri "${KIPRJMOD}/libs/Seeed_Studio_XIAO_Series.pretty")(options "")(descr "Seeed XIAO ESP32-C6 (extracted from this project)"))
+)

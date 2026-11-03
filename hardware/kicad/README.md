@@ -1,12 +1,24 @@
 # KiCad project (KiCad 10)
 
-- `Smart_home_universal_board.kicad_pro / .kicad_sch / .kicad_pcb` – rev 1 board, 37 × 54 mm, 2 layers
-- `production/` – Fabrication Toolkit output sent to JLCPCB (gerber zip, BOM, CPL, IPC netlist)
+| File | Contents |
+| --- | --- |
+| `Smart_home_universal_board.kicad_pro / .kicad_sch / .kicad_pcb` | Rev 1 board, 37 × 54 mm, 2 layers |
+| `libs/` | Project libraries: `EasyEDA` (encoder, SHT40, BH1750, PCA9554, buttons, C4002 socket footprint) and `Seeed_Studio_XIAO_Series` |
+| `sym-lib-table`, `fp-lib-table` | Point KiCad at `libs/` via `${KIPRJMOD}`, so the project opens on any PC |
+| `production/` | Fabrication Toolkit output for JLCPCB (gerber zip, BOM, CPL, IPC netlist) |
 
-The imported LCSC/EasyEDA parts (BMQ22 encoder, SHT40, BH1750, PCA9554, buttons,
-XIAO) come from a separate library (`EasyEDA.kicad_sym` / `EasyEDA.pretty` /
-`EasyEDA.3dshapes`) that is not in this folder. Re-import them with impartGUI by
-LCSC number (see `../BOM.md`) or add the library here.
+The libraries in `libs/` were extracted from the symbols and footprints embedded in
+this schematic and PCB (the original impartGUI library lived only on one PC).
+The EasyEDA **3D models** (`.wrl`) were not embedded and are not included, so those
+five parts show without a body in the 3D viewer. Re-import them with impartGUI by
+LCSC number if you need them (see `../BOM.md`).
 
-Known issue in the source files: the LCSC fields for C15/C16 (should be 10 nF,
-C15195) and R11/R12 (should be 10 kΩ, C25744) still point to C1525 / C25900.
+## BOM fix (Nov 2026)
+
+C15/C16 (10 nF) and R11/R12 (10 kΩ) had the LCSC numbers of the 100 nF and 4.7 kΩ
+parts. Corrected in the schematic, PCB and `production/bom.csv`:
+
+| Ref | Value | Was | Now |
+| --- | --- | --- | --- |
+| C15, C16 | 10 nF 0402 | C1525 | C15195 |
+| R11, R12 | 10 kΩ 0402 | C25900 | C25744 |
