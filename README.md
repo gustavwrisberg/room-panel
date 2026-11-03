@@ -13,7 +13,7 @@ expansion header (motor board, separate design).
 | Folder | Contents |
 | --- | --- |
 | `hardware/BOM.csv` | Full bill of materials for one finished panel (PCB, modules, connectors, cables, case hardware) |
-| `hardware/kicad/` | KiCad project (schematic, PCB, JLCPCB fabrication files) – add yours here |
+| `hardware/kicad/` | KiCad 10 project (schematic, PCB) and the JLCPCB production files |
 | `hardware/case/` | Parametric case (CadQuery), printable STL and STEP files |
 | `firmware/` | ESPHome configuration for the living-room panel |
 | `docs/` | Assembly, Home Assistant setup and pin map |
